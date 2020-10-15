@@ -23,4 +23,5 @@ module "network" {
     Vpc_Name=var.Vpc_Name
     cidr_block=var.cidr_block
     subnets=var.subnets
+
 }

@@ -89,4 +89,6 @@ resource "aws_route_table_association" "csye6225-route-table-subnet-2"{
 resource "aws_route_table_association" "csye6225-route-table-subnet-3"{
     subnet_id =aws_subnet.csye6225-subnet-3.id
     route_table_id =aws_route_table.csye6225-route-table.id
+
 }
+
