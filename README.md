@@ -11,7 +11,7 @@ $ sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $
 $ sudo apt-get update && sudo apt-get install terraform
 ```
 
-# validate the terraform file
+# validate the terraform file.
 go inside the repo
 ```
 terraform validate 
