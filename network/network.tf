@@ -92,3 +92,15 @@ resource "aws_route_table_association" "csye6225-route-table-subnet-3"{
 
 }
 
+output "SUBNET1"{
+    value=aws_subnet.csye6225-subnet-1.id
+}
+ output "SUBNET2"{
+    value=aws_subnet.csye6225-subnet-2.id
+}
+ output "SUBNET3"{
+    value=aws_subnet.csye6225-subnet-3.id
+}
+output "VPC_ID"{
+    value=aws_vpc.csye6225-vpc.id
+}
