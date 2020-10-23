@@ -95,7 +95,7 @@ resource "aws_security_group" "csye6225-database-sg" {
 }
 
 resource "aws_s3_bucket" "csye6225-bucket" {
-  bucket = "webapp.bhavin.dave"
+  bucket = "webapp.dave.bhavin"
   acl = "private"
   force_destroy = "true"
 
@@ -160,14 +160,15 @@ resource "aws_instance" "csye6225-ec2" {
     volume_size = 20
   }
    user_data = <<-EOF
-
-    echo host=${aws_db_instance.csye6225-rds.address} >> .env
-    echo bucket=${var.ImageS3Bucket} >> .env
-    echo secret=${var.AWS_SECRET_ACCESS_KEY} >> .env
-    echo access=${var.AWS_ACCESS_KEY_ID} >> .env
-    chmod 777 .env
-    mkdir webapp
-     chmod 777 .env
+    #!/bin/bash
+    sudo mkdir home/ubuntu/webapp
+    chmod 777 home/ubuntu/webapp
+    sudo touch home/ubuntu/webapp/.env
+    chmod 777 home/ubuntu/webapp/.env
+    echo 'host='${aws_db_instance.csye6225-rds.address}'' >> home/ubuntu/webapp/.env
+    echo 'bucket='${aws_iam_policy.WebAppS3.name}'' >> home/ubuntu/webapp/.env
+    echo 'secret='${var.AWS_SECRET_ACCESS_KEY}'' >> home/ubuntu/webapp/.env
+    echo 'access='${var.AWS_ACCESS_KEY_ID}'' >> home/ubuntu/webapp/.env
     EOF          
            
   
