@@ -1,3 +1,16 @@
+variable "aws_profile"{
+    type=string
+    default="us-east-1"
+}
+variable "aws_account_id"{
+    type=string
+    default="us-east-1"
+}
+variable "cdbucket_name"{
+    type=string
+    default="us-east-1"
+}
+
 provider "aws"{
     region= "us-east-1"
 }
@@ -19,7 +32,7 @@ variable "subnets" {
   }
 variable "key_name"{
     type=string
-    default="prod"
+    default="sshkey"
 }
 variable "ImageS3Bucket"{
     type=string
@@ -52,4 +65,6 @@ module "application" {
   ImageS3Bucket=var.ImageS3Bucket
   AWS_SECRET_ACCESS_KEY=var.AWS_SECRET_ACCESS_KEY
   AWS_ACCESS_KEY_ID=var.AWS_ACCESS_KEY_ID
+  aws_account_id=var.aws_account_id
+   cdbucket_name=var.cdbucket_name
 }
