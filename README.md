@@ -1,4 +1,4 @@
-# infrastructure
+# infrastructure.
 
 # Instruction for downloading teraform
 
