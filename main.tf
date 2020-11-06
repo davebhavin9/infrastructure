@@ -1,3 +1,11 @@
+variable "username"{
+    type=string
+    default="us-east-1"
+}
+variable "password"{
+    type=string
+    default="us-east-1"
+}
 variable "aws_profile"{
     type=string
     default="us-east-1"
@@ -67,4 +75,6 @@ module "application" {
   AWS_ACCESS_KEY_ID=var.AWS_ACCESS_KEY_ID
   aws_account_id=var.aws_account_id
    cdbucket_name=var.cdbucket_name
+   username=var.username
+   password=var.password
 }
