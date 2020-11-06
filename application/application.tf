@@ -1,3 +1,11 @@
+variable "username"{
+    type=string
+    default="us-east-1"
+}
+variable "password"{
+    type=string
+    default="us-east-1"
+}
 variable "aws_profile"{
     type=string
     default="us-east-1"
@@ -145,8 +153,8 @@ resource "aws_db_instance" "csye6225-rds" {
   instance_class = "db.t3.micro"
   name  = "csye6225"
   identifier ="csye6225-f20"
-  username = "csye6225fall2020"
-  password = "foobarbaz"
+  username = var.username
+  password = var.password
   skip_final_snapshot= true
   multi_az = false
   vpc_security_group_ids =[aws_security_group.csye6225-database-sg.id]
