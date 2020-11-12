@@ -110,7 +110,8 @@ resource "aws_security_group" "csye6225-database-sg" {
     from_port = 3306
     protocol = "tcp"
     to_port = 3306
-    cidr_blocks = ["0.0.0.0/0"]
+   # cidr_blocks = ["0.0.0.0/0"]
+   security_groups = [aws_security_group.application-sg.id]
   }
   
 }
@@ -135,6 +136,12 @@ resource "aws_s3_bucket" "csye6225-bucket" {
       storage_class = "STANDARD_IA"
     }
   }
+}
+resource "aws_s3_bucket_public_access_block" "csye6225-bucket" {
+  bucket = aws_s3_bucket.csye6225-bucket.id
+
+  block_public_acls   = true
+  block_public_policy = true
 }
 resource "aws_db_subnet_group" "rds_subnet" {
   name       = "rds_subnet"
@@ -388,7 +395,7 @@ resource "aws_iam_policy" "Actions-Code-Deploy" {
         "codedeploy:GetDeployment"
       ],
       "Resource": [
-        "*"
+        "arn:aws:codedeploy:us-east-1:${var.aws_account_id}:deploymentgroup:webapp/webapp-group"
       ]
     },
     {
@@ -465,4 +472,8 @@ resource "aws_iam_user_policy_attachment" "Actions-Code-Deploy-attachment" {
 resource "aws_iam_user_policy_attachment" "Actions-ec2-ami-attachment" {
   user       = "ghactions"
   policy_arn = aws_iam_policy.actions-ec2-ami.arn
+}
+resource "aws_iam_role_policy_attachment" "CloudWatchAgentServerPolicy" {
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+  role       = aws_iam_role.EC2-CSYE6225.name
 }
