@@ -68,12 +68,12 @@ resource "aws_security_group" "application-sg" {
   name = "application_sg"
   description = "EC2 security group"
   vpc_id = var.VPC_ID
-  ingress {
+  /*ingress {
     from_port = 22
     protocol = "tcp"
     to_port = 22
     cidr_blocks = ["0.0.0.0/0"]
-  }
+  }*/
   ingress {
     from_port = 80
     protocol = "tcp"
@@ -352,6 +352,29 @@ resource "aws_iam_role_policy_attachment" "AWSCodeDeployRole" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
   role       = aws_iam_role.CDServiceRole.name
 }
+resource "aws_lb_target_group" "lb_target_gp" {
+  name     = "lbtargetgp"
+  port     = "8080"
+  protocol = "HTTP"
+  vpc_id   = var.VPC_ID
+  tags= {
+    name = "lb_target_gp"
+  }
+   stickiness {
+    type = "lb_cookie"
+    enabled = true
+  }
+
+    health_check {
+    interval            = 15
+    path                = "/"
+    protocol            = "HTTP"
+    timeout             = 10
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    matcher = "200"
+  }
+}
 resource "aws_autoscaling_group" "csye6225-asg" {
     
     name = "csye6225-asg"
@@ -361,7 +384,7 @@ resource "aws_autoscaling_group" "csye6225-asg" {
     desired_capacity = 3
     launch_configuration = aws_launch_configuration.asg_launch_config.name
     vpc_zone_identifier  = [var.SUBNET1,var.SUBNET2]
-
+    target_group_arns = [aws_lb_target_group.lb_target_gp.arn]
 
     tag {
       key   = "Name"
@@ -612,15 +635,7 @@ resource "aws_lb" "application_load_balancer" {
     Name = "application-load-balancer"
   }
 }
-resource "aws_lb_target_group" "lb_target_gp" {
-  name     = "lbtargetgp"
-  port     = "8080"
-  protocol = "HTTP"
-  vpc_id   = var.VPC_ID
-  tags= {
-    name = "lb_target_gp"
-  }
-}
+
 resource "aws_lb_listener" "alb-listner" {
   load_balancer_arn = aws_lb.application_load_balancer.arn
   port              = "80"
@@ -631,12 +646,12 @@ resource "aws_lb_listener" "alb-listner" {
     target_group_arn = aws_lb_target_group.lb_target_gp.arn
   }
 }
-
+/*
 resource "aws_autoscaling_attachment" "asg_attachment_bar" {
   autoscaling_group_name = aws_autoscaling_group.csye6225-asg.id
   alb_target_group_arn   = aws_lb_target_group.lb_target_gp.arn
 }
-
+*/
 
 resource "aws_route53_record" "alias_route53_record" {
   zone_id = "Z034428080LBB9GYOID3" 
