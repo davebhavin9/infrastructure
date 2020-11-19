@@ -101,6 +101,28 @@ resource "aws_security_group" "application-sg" {
   
 }
 
+resource "aws_security_group" "applicationlb" {
+  name = "application_lb"
+  vpc_id = var.VPC_ID
+  ingress {
+    from_port = 443
+     to_port = 443
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port = 80
+    protocol = "tcp"
+    to_port = 80
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    from_port = 0
+    protocol = "-1"
+    to_port = 0
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
 
 resource "aws_security_group" "csye6225-database-sg" {
   name = "csye6225-database-sg"
@@ -171,7 +193,7 @@ resource "aws_db_instance" "csye6225-rds" {
   db_subnet_group_name = aws_db_subnet_group.rds_subnet.name
 }
 
-
+/*
 resource "aws_instance" "csye6225-ec2" {
   ami = data.aws_ami.ubuntu.image_id
   instance_type = "t2.micro"
@@ -203,6 +225,34 @@ resource "aws_instance" "csye6225-ec2" {
     EOF          
            
   
+}*/
+
+resource "aws_launch_configuration" "asg_launch_config" {
+  name          = "asg_launch_config"
+  image_id      = data.aws_ami.ubuntu.image_id
+  instance_type = "t2.micro"
+  associate_public_ip_address = true
+  key_name = var.key_name
+  iam_instance_profile = aws_iam_instance_profile.EC2-CSYE6225.name
+  security_groups= [aws_security_group.application-sg.id]
+
+  root_block_device {
+    /*device_name = "/dev/sda1"*/
+    volume_type = "gp2"
+   /* delete_on_termination = true*/
+    volume_size = 20
+  }
+  user_data = <<-EOF
+    #!/bin/bash
+    sudo mkdir home/ubuntu/webapp
+    chmod 777 home/ubuntu/webapp
+    sudo touch home/ubuntu/.env
+    chmod 777 home/ubuntu/.env
+    echo 'host='${aws_db_instance.csye6225-rds.address}'' >> home/ubuntu/.env
+    echo 'bucket='${aws_iam_policy.WebAppS3.name}'' >> home/ubuntu/.env
+    echo 'secret='${var.AWS_SECRET_ACCESS_KEY}'' >> home/ubuntu/.env
+    echo 'access='${var.AWS_ACCESS_KEY_ID}'' >> home/ubuntu/.env
+    EOF  
 }
 
 resource "aws_dynamodb_table" "csye6225-dynamoDb" {
@@ -302,7 +352,23 @@ resource "aws_iam_role_policy_attachment" "AWSCodeDeployRole" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRole"
   role       = aws_iam_role.CDServiceRole.name
 }
+resource "aws_autoscaling_group" "csye6225-asg" {
+    
+    name = "csye6225-asg"
+    default_cooldown = 60
+    max_size = 5
+    min_size = 3
+    desired_capacity = 3
+    launch_configuration = aws_launch_configuration.asg_launch_config.name
+    vpc_zone_identifier  = [var.SUBNET1,var.SUBNET2]
 
+
+    tag {
+      key   = "Name"
+      value = "EC2-CSYE6225"
+      propagate_at_launch = true
+  } 
+}
 
 resource "aws_codedeploy_app" "codedeploy-application" {
   name = "webapp"
@@ -322,6 +388,8 @@ resource "aws_codedeploy_deployment_group" "codedeploy-dg" {
     deployment_option = "WITHOUT_TRAFFIC_CONTROL"
     deployment_type = "IN_PLACE"
   }
+   autoscaling_groups = [aws_autoscaling_group.csye6225-asg.id]
+  
   ec2_tag_filter {
     type = "KEY_AND_VALUE"
     key = "Name"
@@ -333,15 +401,15 @@ data "aws_route53_zone" "selected" {
   name         = "prod.davebhavin.me"
   private_zone = false
 }
-
+/*
 resource "aws_route53_record" "www" {
   zone_id = data.aws_route53_zone.selected.zone_id
   name    = "api.${data.aws_route53_zone.selected.name}"
   type    = "A"
   ttl     = "300"
-  records = [aws_instance.csye6225-ec2.public_ip]
+  records = [aws_launch_configuration.asg_launch_config.public_ip]
 }
-
+*/
 resource "aws_iam_policy" "Actions-To-S3" {
   name        = "Actions-Upload-To-S3"
   description = "Actions-Upload-To-S3 policy"
@@ -476,4 +544,108 @@ resource "aws_iam_user_policy_attachment" "Actions-ec2-ami-attachment" {
 resource "aws_iam_role_policy_attachment" "CloudWatchAgentServerPolicy" {
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
   role       = aws_iam_role.EC2-CSYE6225.name
+}
+
+
+
+resource "aws_autoscaling_policy" "instance_scale_up" {
+    name = "instance_scale_up"
+    cooldown = 60
+    scaling_adjustment = 1
+    adjustment_type = "ChangeInCapacity"
+    autoscaling_group_name = aws_autoscaling_group.csye6225-asg.name
+}
+
+resource "aws_autoscaling_policy" "instance_scale_down" {
+    name = "instance_scale_down"
+    cooldown = 60
+    scaling_adjustment = -1
+    adjustment_type = "ChangeInCapacity"
+    autoscaling_group_name = aws_autoscaling_group.csye6225-asg.name
+}
+
+resource "aws_cloudwatch_metric_alarm" "CPU-high" {
+    alarm_name = "cpu-util-high-agents"
+    comparison_operator = "GreaterThanThreshold"
+    evaluation_periods = "1"
+    metric_name = "CPUUtilization"
+    namespace = "AWS/EC2"
+    period = "60"
+    statistic = "Average"
+    threshold = "5"
+    alarm_description = "Scale-up if CPU > 5% for 10 minutes"
+    alarm_actions = [
+        aws_autoscaling_policy.instance_scale_up.arn
+    ]
+    dimensions = {
+        AutoScalingGroupName = aws_autoscaling_group.csye6225-asg.name
+    }
+}
+resource "aws_cloudwatch_metric_alarm" "CPU-low" {
+    alarm_name = "cpu-util-low-agents"
+    comparison_operator = "LessThanThreshold"
+    evaluation_periods = "1"
+    metric_name = "CPUUtilization"
+    namespace = "AWS/EC2"
+    period = "60"
+    statistic = "Average"
+    threshold = "3"
+    alarm_description = "Scale-down if CPU < 20% for 10 minutes"
+    alarm_actions = [
+        aws_autoscaling_policy.instance_scale_down.arn
+    ]
+    dimensions = {
+        AutoScalingGroupName = aws_autoscaling_group.csye6225-asg.name
+    }
+}
+
+
+resource "aws_lb" "application_load_balancer" {
+  name     = "application-load-balancer"
+  internal = false
+  load_balancer_type = "application"
+  ip_address_type    = "ipv4"
+  security_groups = [aws_security_group.applicationlb.id]
+  subnets = [var.SUBNET1,var.SUBNET2,var.SUBNET3]
+
+  tags = {
+    Name = "application-load-balancer"
+  }
+}
+resource "aws_lb_target_group" "lb_target_gp" {
+  name     = "lbtargetgp"
+  port     = "8080"
+  protocol = "HTTP"
+  vpc_id   = var.VPC_ID
+  tags= {
+    name = "lb_target_gp"
+  }
+}
+resource "aws_lb_listener" "alb-listner" {
+  load_balancer_arn = aws_lb.application_load_balancer.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.lb_target_gp.arn
+  }
+}
+
+resource "aws_autoscaling_attachment" "asg_attachment_bar" {
+  autoscaling_group_name = aws_autoscaling_group.csye6225-asg.id
+  alb_target_group_arn   = aws_lb_target_group.lb_target_gp.arn
+}
+
+
+resource "aws_route53_record" "alias_route53_record" {
+  zone_id = "Z034428080LBB9GYOID3" 
+  name    = "prod.davebhavin.me"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.application_load_balancer.dns_name
+    zone_id                = aws_lb.application_load_balancer.zone_id
+    evaluate_target_health = true
+  }
 }
