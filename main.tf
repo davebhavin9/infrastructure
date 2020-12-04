@@ -18,6 +18,10 @@ variable "cdbucket_name"{
     type=string
     default="us-east-1"
 }
+variable "cdbucket_name2"{
+    type=string
+    default="us-east-1"
+}
 
 provider "aws"{
     region= "us-east-1"
@@ -75,6 +79,7 @@ module "application" {
   AWS_ACCESS_KEY_ID=var.AWS_ACCESS_KEY_ID
   aws_account_id=var.aws_account_id
    cdbucket_name=var.cdbucket_name
+   cdbucket_name2=var.cdbucket_name2
    username=var.username
    password=var.password
 }

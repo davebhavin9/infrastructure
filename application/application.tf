@@ -18,6 +18,10 @@ variable "cdbucket_name"{
     type=string
     default="us-east-1"
 }
+variable "cdbucket_name2"{
+    type=string
+    default="us-east-1"
+}
 
 variable "ImageS3Bucket"{
   type=string
@@ -74,23 +78,12 @@ resource "aws_security_group" "application-sg" {
     to_port = 22
     cidr_blocks = ["0.0.0.0/0"]
   }*/
-  ingress {
-    from_port = 80
-    protocol = "tcp"
-    to_port = 80
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  ingress {
-    from_port = 443
-    protocol = "tcp"
-    to_port = 443
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  
   ingress {
     from_port = 8080
     protocol = "tcp"
     to_port = 8080
-    cidr_blocks = ["0.0.0.0/0"]
+    security_groups = [aws_security_group.applicationlb.id]
   }
   egress {
     from_port = 0
@@ -104,12 +97,6 @@ resource "aws_security_group" "application-sg" {
 resource "aws_security_group" "applicationlb" {
   name = "application_lb"
   vpc_id = var.VPC_ID
-  ingress {
-    from_port = 443
-     to_port = 443
-    protocol = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
   ingress {
     from_port = 80
     protocol = "tcp"
@@ -252,6 +239,7 @@ resource "aws_launch_configuration" "asg_launch_config" {
     echo 'bucket='${aws_iam_policy.WebAppS3.name}'' >> home/ubuntu/.env
     echo 'secret='${var.AWS_SECRET_ACCESS_KEY}'' >> home/ubuntu/.env
     echo 'access='${var.AWS_ACCESS_KEY_ID}'' >> home/ubuntu/.env
+     echo  "TopicARN=${aws_sns_topic.default.arn}" >> home/ubuntu/.env
     EOF  
 }
 
@@ -444,12 +432,15 @@ resource "aws_iam_policy" "Actions-To-S3" {
             "Effect": "Allow",
             "Action": [
                 "s3:PutObject",
+                "s3:PutObjectAcl",
                 "s3:Get*",
                 "s3:List*"
             ],
             "Resource": [
                 "arn:aws:s3:::${var.cdbucket_name}",
-                "arn:aws:s3:::${var.cdbucket_name}/*"
+                "arn:aws:s3:::${var.cdbucket_name}/*",
+                "arn:aws:s3:::${var.cdbucket_name2}",
+                "arn:aws:s3:::${var.cdbucket_name2}/*"
             ]
         }
     ]
@@ -663,4 +654,104 @@ resource "aws_route53_record" "alias_route53_record" {
     zone_id                = aws_lb.application_load_balancer.zone_id
     evaluate_target_health = true
   }
+}
+
+resource "aws_iam_role" "lambdaRole" {
+  name = "lambdaRole"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "lambda.amazonaws.com"
+      },
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
+}
+EOF
+}
+resource "aws_iam_role_policy_attachment" "AmazonSESFullAccess" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSESFullAccess"
+  role       = aws_iam_role.lambdaRole.name
+}
+resource "aws_iam_role_policy_attachment" "AWSLambdaBasicExecutionRole" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  role       = aws_iam_role.lambdaRole.name
+}
+resource "aws_iam_role_policy_attachment" "AmazonDynamoDBFullAccess" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+  role       = aws_iam_role.lambdaRole.name
+}
+
+resource "aws_lambda_function" "lambda" {
+  filename      = "~/Desktop/CSYE6225/lambda.zip"
+  function_name = "Email_Service"
+  role          = aws_iam_role.lambdaRole.arn
+  handler       = "lambda.emailService"
+
+  runtime = "nodejs12.x"
+
+  environment {
+    variables = {
+      Domain_Name = "prod.davebhavin.me"
+    }
+  }
+}
+resource "aws_sns_topic" "default" {
+  name = "call-lambda-maybe"
+}
+resource "aws_lambda_permission" "with_sns" {
+  statement_id  = "AllowExecutionFromSNS"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.lambda.function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = aws_sns_topic.default.arn
+}
+
+resource "aws_sns_topic_subscription" "lambda" {
+  topic_arn = aws_sns_topic.default.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.lambda.arn
+}
+
+resource "aws_iam_policy" "SNS_policy" {
+  name        = "SNS_policy"
+  description = "SNS_policy"
+  policy      = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": 
+   [
+     {
+      "Effect":"Allow",
+      "Action":[
+          "SNS:Subscribe",
+          "SNS:SetTopicAttributes",
+          "SNS:RemovePermission",
+          "SNS:Receive",
+          "SNS:Publish",
+          "SNS:ListSubscriptionsByTopic",
+          "SNS:GetTopicAttributes",
+          "SNS:DeleteTopic",
+          "SNS:AddPermission"
+      ],
+      "Resource":"${aws_sns_topic.default.arn}"
+     }
+    ]
+}
+EOF
+
+}
+resource "aws_iam_user_policy_attachment" "LambdaExecution-attachment" {
+  user       = "ghactions"
+  policy_arn = "arn:aws:iam::aws:policy/AWSLambdaFullAccess"
+}
+resource "aws_iam_role_policy_attachment" "SNSTopicPolicy" {
+  policy_arn = aws_iam_policy.SNS_policy.arn
+  role       = aws_iam_role.EC2-CSYE6225.name
 }
