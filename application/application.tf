@@ -72,12 +72,13 @@ resource "aws_security_group" "application-sg" {
   name = "application_sg"
   description = "EC2 security group"
   vpc_id = var.VPC_ID
-  /*ingress {
+  //for demo purpose
+  ingress {
     from_port = 22
     protocol = "tcp"
     to_port = 22
     cidr_blocks = ["0.0.0.0/0"]
-  }*/
+  }
   
   ingress {
     from_port = 8080
@@ -98,9 +99,9 @@ resource "aws_security_group" "applicationlb" {
   name = "application_lb"
   vpc_id = var.VPC_ID
   ingress {
-    from_port = 80
+    from_port = 443
     protocol = "tcp"
-    to_port = 80
+    to_port = 443
     cidr_blocks = ["0.0.0.0/0"]
   }
   egress {
@@ -160,13 +161,23 @@ resource "aws_db_subnet_group" "rds_subnet" {
     Name = "SUBNETGROUP"
   }
 }
+resource "aws_db_parameter_group" "default" {
+  name   = "rds-mysql"
+  family = "mysql5.7"
+
+  parameter {
+    name  = "performance_schema"
+    value = true
+    apply_method = "pending-reboot"
+  }
+}
 
 resource "aws_db_instance" "csye6225-rds" {
   allocated_storage = 20
   storage_type = "gp2"
   engine = "mysql"
   engine_version = "5.7"
-  instance_class = "db.t3.micro"
+  instance_class = "db.t3.small"
   name  = "csye6225"
   identifier ="csye6225-f20"
   username = var.username
@@ -178,6 +189,8 @@ resource "aws_db_instance" "csye6225-rds" {
       Name = "csye6225-rds"
   }
   db_subnet_group_name = aws_db_subnet_group.rds_subnet.name
+  storage_encrypted=true
+  parameter_group_name = aws_db_parameter_group.default.name
 }
 
 /*
@@ -626,16 +639,21 @@ resource "aws_lb" "application_load_balancer" {
     Name = "application-load-balancer"
   }
 }
+data "aws_acm_certificate" "issued" {
+  domain   = "prod.davebhavin.me"
+  statuses = ["ISSUED"]
+}
 
 resource "aws_lb_listener" "alb-listner" {
   load_balancer_arn = aws_lb.application_load_balancer.arn
-  port              = "80"
-  protocol          = "HTTP"
+  port              = "443"
+  protocol          = "HTTPS"
 
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.lb_target_gp.arn
   }
+  certificate_arn= data.aws_acm_certificate.issued.arn
 }
 /*
 resource "aws_autoscaling_attachment" "asg_attachment_bar" {
